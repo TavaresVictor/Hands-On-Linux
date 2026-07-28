@@ -1,199 +1,72 @@
-// Defina os pinos de LED e LDR
-// Defina uma variável com valor máximo do LDR (4000)
-// Defina uma variável para guardar o valor atual do LED (10)
+const int ledPin = 23;
+const int ldrPin = 4;
 
-//sudo modprobe cp210x se nao aparecer o port
+const int ledChannel = 0;   // Canal PWM (0 a 15 no ESP32)
+const int freq = 5000;      // Frequência de 5000 Hz
+const int resolution = 8;   // Resolução de 8 bits (0 a 255)
 
-int ledPin = 23;
-int ledValue = 10;
-
-int ldrPin = 4;
-// Faça testes no sensor LDR para encontrar o valor máximo
-// e atribua à variável ldrMax.
+// Variável de calibração para o LDR (evita falhas se não atingir 4095 exatos)
 int ldrMax = 4000;
-
-// Canal usado pelo PWM do LED.
-int ledChannel = 0;
-
-// Guarda os caracteres recebidos pelo Monitor Serial.
-String serialCommand = "";
-
 void processCommand(String command);
-void ledUpdate();
-int ldrGetValue();
-bool isInteger(String value);
+
 
 void setup() {
     Serial.begin(9600);
-
-    pinMode(ledPin, OUTPUT);
-    pinMode(ldrPin, INPUT);
-
-    // O ESP32 realiza leitura analógica de 0 até 4095.
     analogReadResolution(12);
-
-    // Configuração do PWM:
-    // canal 0, frequência de 5000 Hz e resolução de 8 bits.
-    ledcSetup(ledChannel, 5000, 8);
-    ledcAttachPin(ledPin, ledChannel);
-
-    // Faz o LED iniciar com intensidade 10.
-    ledUpdate();
-
-    Serial.printf("SmartLamp Initialized.\n");
-
-    // Envia automaticamente a leitura do LDR ao conectar.
-    processCommand("GET_LDR");
+    ledcSetup(ledChannel, freq, resolution); 
+    ledcAttachPin(ledPin, ledChannel);       
+    
+    // Essencial para inicializar corretamente o pino analógico no ESP32
+    pinMode(ldrPin, INPUT);
+    pinMode(ledPin, OUTPUT);
+    
+    Serial.println("SmartLamp Initialized.");
 }
 
-
-// Função loop será executada infinitamente pelo ESP32.
 void loop() {
-    // Obtenha os comandos enviados pela serial
-    // e processe-os com a função processCommand.
-
-    while (Serial.available() > 0) {
-        char serialChar = Serial.read();
-
-        // O comando é processado quando o usuário envia
-        // uma quebra de linha pelo Monitor Serial.
-        if (serialChar == '\n') {
-            processCommand(serialCommand);
-            serialCommand = "";
-        }
-        else if (serialChar != '\r') {
-            serialCommand += serialChar;
-        }
+    if(Serial.available() > 0){
+        String comando = Serial.readStringUntil('\n');
+        comando.trim(); 
+        processCommand(comando);
     }
+    
+    
+    delay(1000); // Intervalo para estabilizar a leitura e não sobrecarregar a serial
 }
-
 
 void processCommand(String command) {
-    // Remove espaços e quebras de linha.
-    command.trim();
-
-    // Permite que os comandos sejam enviados
-    // em letras maiúsculas ou minúsculas.
-    command.toUpperCase();
-
-    if (command == "GET_LED") {
-        Serial.printf("RES GET_LED %d\n", ledValue);
-    }
-
-    else if (command == "GET_LDR") {
-        Serial.printf("RES GET_LDR %d\n", ldrGetValue());
-    }
-
-    else if (command.startsWith("SET_LED")) {
-
-        // O comando precisa ter um espaço após SET_LED.
-        if (!command.startsWith("SET_LED ")) {
-            Serial.printf("RES SET_LED -1\n");
-            return;
-        }
-
-        // Obtém o texto após "SET_LED ".
-        String valueText = command.substring(8);
-        valueText.trim();
-
-        // Impede que textos como SET_LED ABC
-        // sejam interpretados como zero.
-        if (!isInteger(valueText)) {
-            Serial.printf("RES SET_LED -1\n");
-            return;
-        }
-
-        int newLedValue = valueText.toInt();
-
-        // Somente valores entre 0 e 100 são permitidos.
-        if (newLedValue >= 0 && newLedValue <= 100) {
-            ledValue = newLedValue;
-
-            ledUpdate();
-
-            Serial.printf("RES SET_LED 1\n");
-        }
-        else {
-            Serial.printf("RES SET_LED -1\n");
-        }
-    }
-
-    else {
-        Serial.printf("ERR Unknown command.\n");
+    if(command.startsWith("SET_LED ")){
+      ledUpdate(command);
+    }   
+    else if(command == "GET_LDR"){
+        Serial.print("A luminosidade local está : ");
+        Serial.print(ldrGetValue());
+        Serial.println("%");
+    } else {
+        Serial.println("Comando desconhecido: " + command);
     }
 }
 
+void ledUpdate(String comando) {
+  Serial.println(comando);
+  int posicaoEspaco = comando.indexOf(' ');
+  String valorTexto = comando.substring(posicaoEspaco + 1);
+  int valorLED = valorTexto.toInt();
+  int brilhoPWM = map(valorLED, 0, 100, 0, 255);
+  if(brilhoPWM < 0 || brilhoPWM > 100){
+    Serial.println("comando invalido - LED apenas de 0 a 100");
+  }
+  else{
+      Serial.println(brilhoPWM);
+      ledcWrite(ledChannel, brilhoPWM); 
+  }
 
-// Função para atualizar o valor do LED.
-void ledUpdate() {
-    // Converte o valor recebido pelo comando SET_LED
-    // do intervalo 0–100 para o intervalo 0–255.
-
-    int normalizedLedValue = map(
-        ledValue,
-        0,
-        100,
-        0,
-        255
-    );
-
-    // Envia o valor normalizado para o LED.
-    ledcWrite(ledChannel, normalizedLedValue);
 }
 
-
-// Função para ler o valor do LDR.
 int ldrGetValue() {
-    // Leia o sensor LDR e retorne o valor
-    // normalizado entre 0 e 100.
-
-    int ldrAnalogValue = analogRead(ldrPin);
-
-    int normalizedLdrValue = map(
-        ldrAnalogValue,
-        0,
-        ldrMax,
-        0,
-        100
-    );
-
-    // Garante que o resultado fique entre 0 e 100,
-    // mesmo que a leitura ultrapasse o ldrMax.
-    normalizedLdrValue = constrain(
-        normalizedLdrValue,
-        0,
-        100
-    );
-
-    return normalizedLdrValue;
-}
-
-
-// Verifica se o parâmetro recebido é realmente um número inteiro.
-bool isInteger(String value) {
-    value.trim();
-
-    if (value.length() == 0) {
-        return false;
-    }
-
-    int firstPosition = 0;
-
-    // Aceita o sinal para que valores negativos sejam
-    // reconhecidos e posteriormente rejeitados pelo intervalo.
-    if (value.charAt(0) == '-' || value.charAt(0) == '+') {
-        firstPosition = 1;
-    }
-
-    if (firstPosition == value.length()) {
-        return false;
-    }
-
-    for (int i = firstPosition; i < value.length(); i++) {
-        if (!isDigit(value.charAt(i))) {
-            return false;
-        }
-    }
-
-    return true;
+    int ldrValue = analogRead(ldrPin);
+    int ldf_value_normalized = map(ldrValue, 0, ldrMax, 0, 100);
+    // Garante que o valor fique estritamente entre 0 e 100%
+    ldf_value_normalized = constrain(ldf_value_normalized, 0, 100);
+    return ldf_value_normalized;
 }

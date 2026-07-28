@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "author": "Equipe 0X - DevTITANS 05",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-esp32-devkit-v1",
+      "id": "esp",
+      "top": -20,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr",
+      "top": 30,
+      "left": 300,
+      "attrs": { "lux": "500" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led",
+      "top": -80,
+      "left": 300,
+      "attrs": { "color": "white" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "resistor",
+      "top": -35,
+      "left": 220,
+      "attrs": { "value": "220" }
+    }
+  ],
+  "connections": [
+    [ "esp:3V3", "ldr:VCC", "red", [] ],
+    [ "esp:GND.1", "ldr:GND", "black", [] ],
+    [ "ldr:AO", "esp:D34", "green", [] ],
+    [ "esp:D2", "resistor:1", "green", [] ],
+    [ "resistor:2", "led:A", "green", [] ],
+    [ "led:C", "esp:GND.1", "black", [] ]
+  ]
+}

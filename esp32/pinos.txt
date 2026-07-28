@@ -1,0 +1,10 @@
+
+SmartLamp - pinagem da simulacao e da montagem fisica
+
+LED/PWM: GPIO 2
+LDR/ADC: GPIO 34 (entrada analogica, somente entrada)
+LDR VCC: 3V3
+LDR GND: GND
+LED: GPIO 2 -> resistor de 220 ohms -> anodo do LED; catodo -> GND
+
+O firmware normaliza o ADC para 0..100 e o PWM do LED para 0..255.

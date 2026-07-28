@@ -14,8 +14,8 @@ static uint usb_in, usb_out;                       // Endereços das portas de e
 static char *usb_in_buffer, *usb_out_buffer;       // Buffers de entrada e saída da USB
 static int usb_max_size;                           // Tamanho máximo de uma mensagem USB
 
-#define VENDOR_ID   SUBSTITUA_PELO_VENDORID /* Encontre o VendorID  do smartlamp */
-#define PRODUCT_ID  SUBSTITUA_PELO_PRODUCTID /* Encontre o ProductID do smartlamp */
+#define VENDOR_ID   0x10C4 /* Silicon Labs */
+#define PRODUCT_ID  0xEA60 /* CP2102/CP210x */
 static const struct usb_device_id id_table[] = { { USB_DEVICE(VENDOR_ID, PRODUCT_ID) }, {} };
 
 static int  usb_probe(struct usb_interface *ifce, const struct usb_device_id *id); // Executado quando o dispositivo é conectado na USB
@@ -78,12 +78,21 @@ static int usb_probe(struct usb_interface *interface, const struct usb_device_id
 
     // Detecta portas e aloca buffers de entrada e saída de dados na USB
     smartlamp_device = interface_to_usbdev(interface);
-    ignore =  usb_find_common_endpoints(interface->cur_altsetting, &usb_endpoint_in, &usb_endpoint_out, NULL, NULL);
+    ret = usb_find_common_endpoints(interface->cur_altsetting,
+                                    &usb_endpoint_in, &usb_endpoint_out,
+                                    NULL, NULL);
+    if (ret < 0)
+        return ret;
     usb_max_size = usb_endpoint_maxp(usb_endpoint_in);
     usb_in = usb_endpoint_in->bEndpointAddress;
     usb_out = usb_endpoint_out->bEndpointAddress;
     usb_in_buffer = kmalloc(usb_max_size, GFP_KERNEL);
     usb_out_buffer = kmalloc(usb_max_size, GFP_KERNEL);
+    if (!usb_in_buffer || !usb_out_buffer) {
+        kfree(usb_in_buffer);
+        kfree(usb_out_buffer);
+        return -ENOMEM;
+    }
 
     // Chama a função para configurar a porta serial antes de usar
     ret = smartlamp_config_serial(smartlamp_device);

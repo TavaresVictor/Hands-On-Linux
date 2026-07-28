@@ -1,6 +1,8 @@
 #include <linux/module.h>
+#include <linux/kobject.h>
 #include <linux/usb.h>
 #include <linux/slab.h>
+#include <linux/sysfs.h>
 
 MODULE_AUTHOR("DevTITANS <devtitans@icomp.ufam.edu.br>");
 MODULE_DESCRIPTION("Driver de acesso ao SmartLamp (ESP32 com Chip Serial CP2102)");
@@ -14,8 +16,8 @@ static uint usb_in, usb_out;                       // Endereços das portas de e
 static char *usb_in_buffer, *usb_out_buffer;       // Buffers de entrada e saída da USB
 static int usb_max_size;                           // Tamanho máximo de uma mensagem USB
 
-#define VENDOR_ID   SUBSTITUA_PELO_VENDORID /* Encontre o VendorID  do smartlamp */
-#define PRODUCT_ID  SUBSTITUA_PELO_PRODUCTID /* Encontre o ProductID do smartlamp */
+#define VENDOR_ID   0x10C4 /* Silicon Labs */
+#define PRODUCT_ID  0xEA60 /* CP2102/CP210x */
 static const struct usb_device_id id_table[] = { { USB_DEVICE(VENDOR_ID, PRODUCT_ID) }, {} };
 
 static int  usb_probe(struct usb_interface *ifce, const struct usb_device_id *id); // Executado quando o dispositivo é conectado na USB
@@ -158,6 +160,20 @@ static int usb_write_serial(char *cmd, int param) {
 
     printk(KERN_INFO "SmartLamp: Enviando comando: %s %d\n", cmd, param);
 
+    if (param < 0)
+        snprintf(usb_out_buffer, usb_max_size, "%s\n", cmd);
+    else
+        snprintf(usb_out_buffer, usb_max_size, "%s %d\n", cmd, param);
+
+    ret = usb_bulk_msg(smartlamp_device,
+                       usb_sndbulkpipe(smartlamp_device, usb_out),
+                       usb_out_buffer, strlen(usb_out_buffer),
+                       &actual_size, 2000);
+    if (ret < 0)
+        return ret;
+    if (actual_size != strlen(usb_out_buffer))
+        return -EIO;
+
     // TASK 2.3: adapte aqui a solução da Tarefa 2.2.
     // Dica: quando param for negativo, envie apenas "COMANDO\n".
     // Quando param for 0 ou maior, envie "COMANDO PARAMETRO\n".
@@ -179,6 +195,30 @@ static int usb_read_serial(char *cmd) {
     int i;
 
     printk(KERN_INFO "SmartLamp: Aguardando resposta para %s...\n", cmd);
+
+    while (recv_size < MAX_RECV_LINE - 1) {
+        ret = usb_bulk_msg(smartlamp_device,
+                           usb_rcvbulkpipe(smartlamp_device, usb_in),
+                           usb_in_buffer,
+                           min(usb_max_size, MAX_RECV_LINE - 1),
+                           &actual_size, 2000);
+        if (ret < 0)
+            return ret;
+
+        for (i = 0; i < actual_size && recv_size < MAX_RECV_LINE - 1; ++i) {
+            recv_line[recv_size++] = usb_in_buffer[i];
+            if (usb_in_buffer[i] == '\n') {
+                char response_command[32];
+                int value;
+
+                recv_line[recv_size] = '\0';
+                if (sscanf(recv_line, "RES %31s %d", response_command,
+                           &value) == 2 && strcmp(response_command, cmd) == 0)
+                    return value;
+                recv_size = 0;
+            }
+        }
+    }
 
     // TASK 2.4: adapte aqui a solução da Tarefa 2.1.2.
     //
@@ -214,6 +254,19 @@ static ssize_t attr_show(struct kobject *sys_obj, struct kobj_attribute *attr, c
 
     printk(KERN_INFO "SmartLamp: Lendo %s ...\n", attr_name);
 
+    if (strcmp(attr_name, "led") == 0) {
+        if (usb_write_serial("GET_LED", -1) == 0)
+            value = usb_read_serial("GET_LED");
+    } else if (strcmp(attr_name, "ldr") == 0) {
+        if (usb_write_serial("GET_LDR", -1) == 0)
+            value = usb_read_serial("GET_LDR");
+    } else {
+        return -EOPNOTSUPP;
+    }
+
+    if (value < 0)
+        return value;
+
     // TASK 2.3: implemente a leitura via sysfs.
     // Use attr_name para identificar se o usuario leu led, ldr ou threshold.
     // Para cada arquivo, envie o comando GET correspondente ao firmware
@@ -245,6 +298,15 @@ static ssize_t attr_store(struct kobject *sys_obj, struct kobj_attribute *attr, 
     }
 
     printk(KERN_INFO "SmartLamp: Setando %s para %ld ...\n", attr_name, value);
+
+    if (strcmp(attr_name, "led") != 0)
+        return -EACCES;
+
+    ret = usb_write_serial("SET_LED", value);
+    if (ret == 0)
+        ret = usb_read_serial("SET_LED");
+    if (ret < 0)
+        return ret;
 
     // TASK 2.3: implemente a escrita via sysfs.
     // Use attr_name para permitir escrita em led e threshold.

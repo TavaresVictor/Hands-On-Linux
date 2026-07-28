@@ -10,35 +10,48 @@
  * leitura serial mesmo antes de enviar um comando pelo driver.
  */
 const uint8_t LED_PIN = 2;       // LED onboard/externo usado no simulador
-const uint8_t LDR_PIN = 34;      // GPIO somente entrada e ADC no ESP32
+const uint8_t LDR_PIN = 4;      // GPIO somente entrada e ADC no ESP32
 const int LDR_MAX_READING = 4095;
 const unsigned long TELEMETRY_INTERVAL_MS = 2000;
+
+const int LED_CHANNEL = 0;       // Canal PWM (0 a 15 no ESP32)
+const int LED_FREQ = 5000;       // Frequencia de 5000 Hz
+const int LED_RESOLUTION = 8;    // Resolucao de 8 bits (0 a 255)
+
 int ledValue = 10;               // intensidade em porcentagem
 int ldrMax = LDR_MAX_READING;
 unsigned long lastTelemetry = 0;
 String serialLine;
+
 void processCommand(String command);
 void ledUpdate();
 int ldrGetValue();
+
 static void sendResponse(const char *command, int value)
 {
     Serial.printf("RES %s %d\n", command, value);
 }
+
 static void sendError(const char *reason)
 {
     Serial.printf("ERR %s\n", reason);
 }
+
 void setup()
 {
     Serial.begin(9600);
     pinMode(LED_PIN, OUTPUT);
     pinMode(LDR_PIN, INPUT);
     analogReadResolution(12);
-    analogWrite(LED_PIN, 0);
+
+    ledcSetup(LED_CHANNEL, LED_FREQ, LED_RESOLUTION);
+    ledcAttachPin(LED_PIN, LED_CHANNEL);
+
     ledUpdate();
     serialLine.reserve(64);
     Serial.println("RES READY 1");
 }
+
 void loop()
 {
     while (Serial.available() > 0) {
@@ -58,6 +71,7 @@ void loop()
         sendResponse("GET_LDR", ldrGetValue());
     }
 }
+
 void processCommand(String command)
 {
     command.trim();
@@ -83,16 +97,16 @@ void processCommand(String command)
         sendError("INVALID_COMMAND");
     }
 }
+
 void ledUpdate()
 {
     const int pwmValue = map(ledValue, 0, 100, 0, 255);
-    analogWrite(LED_PIN, constrain(pwmValue, 0, 255));
+    ledcWrite(LED_CHANNEL, constrain(pwmValue, 0, 255));
 }
+
 int ldrGetValue()
 {
     const int rawValue = analogRead(LDR_PIN);
     const int maximum = (ldrMax > 0) ? ldrMax : LDR_MAX_READING;
     return constrain(map(rawValue, 0, maximum, 0, 100), 0, 100);
 }
-
-

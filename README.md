@@ -1,144 +1,121 @@
+# DevTITANS 05 — HandsOn Linux — Equipe 0X
 
+Projeto de integração entre um ESP32 e um módulo USB/serial CP2102. O
+firmware implementa uma SmartLamp e o driver Linux disponibiliza os comandos
+por arquivos em `/sys/kernel/smartlamp`.
 
-# DevTITANS 05 - HandsOn Linux - Equipe 0X
+## Integrantes
 
-Bem-vindo ao repositório da Equipe 0X do HandsON de Linux do DevTITANS! Este projeto contém um firmware para o ESP32 escrito em formato Arduino `.ino`, bem como um driver do kernel Linux escrito em C. O objetivo é demonstrar como criar uma solução completa de hardware e software que integra um dispositivo ESP32 com um sistema Linux.
+Em ordem alfabética:
 
-## Tabela de Conteúdos
+1. Ademar Castro
+2. Ivan Marcos
+3. João Tavares
+4. Pedro Sadarc
+5. Silas Filho
 
-- [Contribuidores](#contribuidores)
-- [Introdução](#introdução)
-- [Recursos](#recursos)
-- [Requisitos](#requisitos)
-- [Configuração de Hardware](#configuração-de-hardware)
-- [Instalação](#instalação)
-- [Uso](#uso)
-- [Contato](#contato)
+Contato: [ademar.castro@icomp.ufam.edu.br](mailto:ademar.castro@icomp.ufam.edu.br)
 
-## Contribuidores
+## Componentes
 
-<img src="https://github.com/DevTITANS05/Hands-On-Linux-fork-/assets/21023906/85e61f3e-476c-47a4-82d5-4054e856c67b" width="180" >
-<img src="https://github.com/DevTITANS05/Hands-On-Linux-fork-/assets/21023906/85e61f3e-476c-47a4-82d5-4054e856c67b" width="180" >
-<img src="https://github.com/DevTITANS05/Hands-On-Linux-fork-/assets/21023906/85e61f3e-476c-47a4-82d5-4054e856c67b" width="180" >
-<img src="https://github.com/DevTITANS05/Hands-On-Linux-fork-/assets/21023906/85e61f3e-476c-47a4-82d5-4054e856c67b" width="180" >
-<img src="https://github.com/DevTITANS05/Hands-On-Linux-fork-/assets/21023906/85e61f3e-476c-47a4-82d5-4054e856c67b" width="180" >
-<img src="https://github.com/DevTITANS05/Hands-On-Linux-fork-/assets/21023906/85e61f3e-476c-47a4-82d5-4054e856c67b" width="180" >
+- `smartlamp.ino`: firmware Arduino para ESP32.
+- `diagram.json`: circuito pronto para ser montado no simulador Wokwi.
+- `smartlamp-kernel-module/smartlamp.c`: driver USB completo com interface
+  sysfs.
+- `smartlamp-kernel-module/probe.c`, `serial_write.c`, `serial_read.c` e
+  `sysfs.c`: versões isoladas das etapas da atividade, selecionáveis pelo
+  `Makefile`.
 
-- **Nome do(a) Aluno(a) 01:** Desenvolvedor do Firmware e Mantenedor do Projeto
-- **Nome do(a) Aluno(a) 02:** Desenvolvedor do Firmware
-- **Nome do(a) Aluno(a) 03:** Desenvolvedor do Driver Linux
-- **Nome do(a) Aluno(a) 04:** Desenvolvedor do Driver Linux
-- **Nome do(a) Aluno(a) 05:** Desenvolvedor do Firmware e Escritor da Documentação
+## Pinagem
 
-## Introdução
+| Função | ESP32 | Simulação |
+|---|---:|---|
+| LED/PWM | GPIO 2 | LED externo com resistor de 220 Ω |
+| LDR/ADC | GPIO 34 | Saída `AO` do `wokwi-photoresistor-sensor` |
+| Alimentação do LDR | 3V3 e GND | 3V3 e GND da placa |
 
-Este projeto serve como um exemplo para desenvolvedores interessados em construir e integrar soluções de hardware personalizadas com sistemas Linux. Inclui os seguintes componentes:
-- Firmware para o microcontrolador ESP32 para lidar com operações específicas do dispositivo.
-- Um driver do kernel Linux que se comunica com o dispositivo ESP32, permitindo troca de dados e controle.
+O valor do LED é uma porcentagem de 0 a 100. O valor do LDR também é
+normalizado para 0 a 100.
 
-## Recursos
+## Protocolo serial
 
-- **Firmware ESP32:**
-  - Aquisição básica de dados de sensores.
-  - Comunicação via Serial com o driver Linux.
-  
-- **Driver do Kernel Linux:**
-  - Rotinas de inicialização e limpeza.
-  - Operações de arquivo de dispositivo (`GET_LED`, `SET_LED`, `GET_LDR`).
-  - Comunicação com o ESP32 via Serial.
+A comunicação usa 9600 baud, 8N1, e cada mensagem termina com `\n`:
 
-## Requisitos
+```text
+SET_LED 80  -> RES SET_LED 80
+GET_LED     -> RES GET_LED 80
+GET_LDR     -> RES GET_LDR 45
+```
 
-- **Hardware:**
-  - Placa de Desenvolvimento ESP32
-  - Máquina Linux
-  - Protoboard e Cabos Jumper
-  - Sensor LDR
-  
-- **Software:**
-  - Arduino IDE
-  - Kernel Linux 4.0 ou superior
-  - GCC 4.8 ou superior
-  - Make 3.81 ou superior
+O firmware também publica `RES GET_LDR <valor>` periodicamente, a cada dois
+segundos. O driver ignora respostas que pertencem a outro comando.
 
-## Configuração de Hardware
+## Teste online no Wokwi
 
-1. **Conecte o ESP32 à sua Máquina Linux:**
-    - Use um cabo USB.
-    - Conecte os sensores ao ESP32 conforme especificado no firmware.
+1. Crie um projeto **ESP32 DevKit v1** em [Wokwi](https://wokwi.com/).
+2. Copie o conteúdo de `smartlamp.ino` para o sketch.
+3. Substitua o diagrama pelo conteúdo de `diagram.json` deste repositório.
+4. Inicie a simulação e abra o monitor serial em 9600 baud.
+5. Envie, por exemplo, `SET_LED 75`, `GET_LED` ou `GET_LDR`.
 
-2. **Garanta a alimentação e conexões adequadas:**
-    - Use um protoboard e cabos jumper para montar o circuito.
-    - Consulte o diagrama esquemático fornecido no diretório `esp32` para conexões detalhadas.
+Essa modalidade substitui a placa física para demonstrar o firmware e o
+protocolo. Um navegador não expõe um dispositivo USB CP2102 para um módulo de
+kernel; portanto, a parte do driver precisa ser compilada e executada em uma
+máquina Linux com um ESP32 conectado por USB, ou validada com um dispositivo
+serial compatível.
 
-## Instalação
+## Firmware em placa física
 
-### Firmware ESP32
+No Arduino IDE, abra `smartlamp.ino`, selecione **ESP32 Dev Module** (ou
+**Node32s**), escolha a porta serial e faça o upload. O firmware usa o mesmo
+protocolo da simulação.
 
-1. **Abra o Arduino IDE e carregue o firmware:**
-    ```sh
-    Arquivo -> Abrir -> Selecione `smartlamp.ino`
-    ```
+## Compilação do driver Linux
 
-2. **Configure a Placa e a Porta:**
-    ```sh
-    Ferramentas -> Placa -> Node32s
-    Ferramentas -> Porta -> Selecione a porta apropriada
-    ```
+É necessário ter os headers do kernel em uso, GCC e Make:
 
-3. **Carregue o Firmware:**
-    ```sh
-    Sketch -> Upload (Ctrl+U)
-    ```
+```sh
+cd smartlamp-kernel-module
+make
+```
 
-### Driver Linux
+O resultado é `smartlamp.ko`. Para compilar uma etapa isolada:
 
-1. **Clone o Repositório:**
-    ```sh
-    git clone https://github.com/seuusuario/Hands-On-Linux.git
-    cd Hands-On-Linux
-    ```
+```sh
+make MODULE=probe
+make MODULE=serial_write
+make MODULE=serial_read
+make MODULE=sysfs
+```
 
-2. **Compile o Driver:**
-    ```sh
-    cd smartlamp-kernel-module
-    make
-    ```
+O driver está configurado para o CP2102, com `Vendor ID 0x10C4` e `Product
+ID 0xEA60`. Como o Linux normalmente já possui o driver genérico `cp210x`,
+ele pode estar usando o dispositivo. Nesse caso, desassocie a interface do
+`cp210x` antes de carregar este módulo, conforme o identificador mostrado por
+`lsusb` e em `/sys/bus/usb/devices/`.
 
-3. **Carregue o Driver:**
-    ```sh
-    sudo insmod smartlamp.ko
-    ```
+```sh
+sudo insmod smartlamp.ko
+dmesg | tail -n 20
+```
 
-4. **Verifique o Driver:**
-    ```sh
-    dmesg | tail
-    ```
+## Uso pelo sysfs
 
-## Uso
+```sh
+echo 80 | sudo tee /sys/kernel/smartlamp/led
+cat /sys/kernel/smartlamp/led
+cat /sys/kernel/smartlamp/ldr
+```
 
-Depois que o driver e o firmware estiverem configurados, você poderá interagir com o dispositivo ESP32 através do sistema Linux.
+Para remover o módulo:
 
-- **Escrever para o Dispositivo:**
-    ```sh
-    echo "100" > /sys/kernel/smartlamp/led
-    ```
+```sh
+sudo rmmod smartlamp
+```
 
-- **Ler do Dispositivo:**
-    ```sh
-    cat /sys/kernel/smartlamp/led
-    ```
+O arquivo `ldr` é somente leitura. Valores de LED fora do intervalo 0–100
+retornam erro.
 
-- **Verificar Mensagens do Driver:**
-    ```sh
-    dmesg | tail
-    ```
+## Licença
 
-- **Remover o Driver:**
-    ```sh
-    sudo rmmod smartlamp
-    ```
-    
-## Contato
-
-Para perguntas, sugestões ou feedback, entre em contato com o mantenedor do projeto em [maintainer@example.com](mailto:maintainer@example.com).
+O driver é distribuído sob GPL, conforme declarado no código-fonte.

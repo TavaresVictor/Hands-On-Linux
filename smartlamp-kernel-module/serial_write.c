@@ -5,7 +5,8 @@
 MODULE_AUTHOR("DevTITANS <devtitans@icomp.ufam.edu.br>");
 MODULE_DESCRIPTION("Driver de acesso ao SmartLamp (ESP32 com Chip Serial CP2102)");
 MODULE_LICENSE("GPL");
-
+#define VENDOR_ID   0x10C4 /* Encontre o VendorID  do smartlamp */
+#define PRODUCT_ID  0xEA60 /* Encontre o ProductID do smartlamp */
 
 #define MAX_RECV_LINE 100 // Tamanho máximo de uma linha de resposta do dispositivo USB
 
@@ -14,8 +15,7 @@ static uint usb_in, usb_out;                       // Endereços das portas de e
 static char *usb_in_buffer, *usb_out_buffer;       // Buffers de entrada e saída da USB
 static int usb_max_size;                           // Tamanho máximo de uma mensagem USB
 
-#define VENDOR_ID   SUBSTITUA_PELO_VENDORID /* Encontre o VendorID  do smartlamp */
-#define PRODUCT_ID  SUBSTITUA_PELO_PRODUCTID /* Encontre o ProductID do smartlamp */
+
 static const struct usb_device_id id_table[] = { { USB_DEVICE(VENDOR_ID, PRODUCT_ID) }, {} };
 
 static int  usb_probe(struct usb_interface *ifce, const struct usb_device_id *id); // Executado quando o dispositivo é conectado na USB
@@ -36,7 +36,7 @@ static int smartlamp_config_serial(struct usb_device *dev)
     //    bRequest: 0x00 (CP210X_IFC_ENABLE)
     //    wValue: 0x0001 (UART Enable)
     ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-                          0x00, 0x41, 0x0001, 0, NULL, 0, 1000);
+                        0x00, 0x41, 0x0001, 0, NULL, 0, 1000);
     if (ret)
     {
         printk(KERN_ERR "SmartLamp: Erro ao habilitar a UART (código %d)\n", ret);
@@ -47,7 +47,7 @@ static int smartlamp_config_serial(struct usb_device *dev)
     //    Comando específico do vendor Silicon Labs (CP210X_SET_BAUDRATE)
     //    bRequest: 0x1E (CP210X_SET_BAUDRATE)
     ret = usb_control_msg(dev, usb_sndctrlpipe(dev, 0),
-                          0x1E, 0x41, 0, 0, &baudrate, sizeof(baudrate), 1000);
+                        0x1E, 0x41, 0, 0, &baudrate, sizeof(baudrate), 1000);
     if (ret < 0)
     {
         printk(KERN_ERR "SmartLamp: Erro ao configurar o baud rate (código %d)\n", ret);
@@ -74,7 +74,7 @@ module_usb_driver(smartlamp_driver);
 static int usb_probe(struct usb_interface *interface, const struct usb_device_id *id) {
     struct usb_endpoint_descriptor *usb_endpoint_in, *usb_endpoint_out;
     int ret;
-
+    usb_write_serial("SET_LED", 80);
     printk(KERN_INFO "SmartLamp: Dispositivo conectado ...\n");
 
     // Detecta portas e aloca buffers de entrada e saída de dados na USB
@@ -115,12 +115,47 @@ static void usb_disconnect(struct usb_interface *interface) {
 // Exemplo de uso: usb_write_serial("GET_LDR", 0);
 static int usb_write_serial(char *cmd, int param) {
     int ret, actual_size;
+    int len;
 
     printk(KERN_INFO "SmartLamp: Enviando comando: %s %d\n", cmd, param);
 
     // TASK 2.2: Implemente o envio do comando para o dispositivo
     // Dica: Formate o comando no buffer usb_out_buffer e envie usando usb_bulk_msg
     // O formato esperado é: "COMANDO PARAMETRO\n"
+
+    if (!smartlamp_device || !usb_out_buffer) {
+        printk(KERN_ERR "SmartLamp: Erro! Dispositivo ou buffer de saida nao inicializados.\n");
+        return -ENODEV;
+    }
+
+    if (strcmp(cmd, "GET_LDR") == 0 || strcmp(cmd, "GET_LED") == 0) {
+        // Formato final: "GET_LDR\n" ou "GET_LED\n"
+        len = snprintf(usb_out_buffer, usb_max_size, "%s\n", cmd);
+    } else {
+        // Formato final: "SET_LED 100\n"
+        len = snprintf(usb_out_buffer, usb_max_size, "%s %d\n", cmd, param);
+    }
+
+    if (len >= usb_max_size) {
+        printk(KERN_ERR "SmartLamp: Erro! Comando muito longo para o buffer USB.\n");
+        return -EINVAL;
+    }
+
+    ret = usb_bulk_msg(smartlamp_device,
+        usb_sndbulkpipe(smartlamp_device, usb_out),
+        usb_out_buffer, 
+        len,
+        &actual_size,
+        5000); // Timeout de 5 segundos
+    
+        if (ret) {
+        printk(KERN_ERR "SmartLamp: Erro ao enviar bulk msg (codigo %d)\n", ret);
+        return ret;
+    }
+
+    printk(KERN_INFO "SmartLamp: %d bytes enviados com sucesso via USB Bulk.\n", actual_size);
+    return 0;
+
 
     return 0;
 }

@@ -64,7 +64,6 @@ void ledUpdate(String comando) {
   }
   else{
       int brilhoPWM = map(valorLED, 0, 100, 0, 255);
-      Serial.println(brilhoPWM);
       ledcWrite(ledChannel, brilhoPWM);
   }
 

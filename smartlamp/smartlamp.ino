@@ -22,6 +22,10 @@ void setup() {
     pinMode(ledPin, OUTPUT);
 
     Serial.println("SmartLamp Initialized.");
+
+    // ===== ALTERAÇÃO TASK 2.1.1 =====
+    // Executa automaticamente o GET_LDR ao iniciar o ESP32.
+    processCommand("GET_LDR");
 }
 
 void loop() {
